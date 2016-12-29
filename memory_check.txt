@@ -1,0 +1,66 @@
+#!/bin/bash
+#set -xv
+
+while getopts "c:w:e:" opt; do
+	case $opt in
+		c)
+			c_value=$OPTARG
+			echo "Critical threshold: $OPTARG"
+			;;
+		w)
+                        w_value=$OPTARG
+                        echo "Warning threshold:  $OPTARG"
+			;;
+		e)
+			e_value=$OPTARG
+			echo "Email Address: $OPTARG"
+			;;	
+	esac
+done
+
+#Critical threshold must be greater than Warning threshold.
+if [ !  "$c_value" ] && [ ! "$w_value" ]
+then
+        echo "Please input Critical threshold value"
+	read c_value
+	echo $c_value
+	echo "Please input Warning threshold value"
+	read w_value
+        echo $w_value
+fi
+
+if [ "$c_value" -le "$w_value" ]
+then
+	echo "Critical threshold must be greater than Warning threshold."
+	exit 1;
+fi
+
+#for memory usage comparison
+USED_MEMORYVALUE=$( free -m | grep -i mem | awk '{ print $3*100/$2}' | bc -l )
+USED_MEMORY=${USED_MEMORYVALUE/.*}
+echo "Memory usage: $USED_MEMORY"
+
+if [ "$USED_MEMORY" -le "$w_value" ];
+then
+        echo "Used memory is less than the Warning threshold."
+        exit 0;
+elif [ "$USED_MEMORY" -ge "$w_value" ] && [ "$USED_MEMORY" -le "$c_value" ];
+then
+        echo "Used memory is greater than Warning threshold but less than Critical threshold."
+        exit 1;
+elif [ "$USED_MEMORY" -ge "$c_value" ]
+then
+        echo "Used memory is greater than critical threshold."
+	exit 2;
+fi
+ 
+#for sending email
+MAIL_SUBJ="${DATE} memory check - critical"
+ps aux --sort '%mem' | head -11 >> usage.txt
+MAIL_MSG=cat usage.txt
+
+if [ "$USED_MEMORY" -ge "$c_value" ];
+then
+	mailx -s "$MAIL_SUBJ" $e_value -- -r < $MAIL_MSG
+fi
+
